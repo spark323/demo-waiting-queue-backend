@@ -1,0 +1,308 @@
+frameworkVersion: "3"
+service: demo-waiting-queue
+app: backend
+useDotenv: true
+provider:
+  name: aws
+  runtime: nodejs16.x
+  deploymentMethod: direct
+  versionFunctions: false
+  iam:
+    role: DefaultRole
+  httpApi:
+    cors: true
+  stage: ${env:STAGE, "dev"}
+  tags:
+    Service: ${self:service}
+    Environment: ${env:STAGE, "dev"}
+  stackTags:
+    Service: ${self:service}
+    Environment: ${env:STAGE, "dev"}
+  region: ${opt:region, "ap-northeast-2"}
+  stackName: ${self:service}-${env:STAGE, "dev"}-${env:VER, "1"}-serverless
+  timeout: 30 #api gateway를 거칠 경우 lambda의 max
+  environment:
+    service: ${self:service}
+    version: ${env:VER, "1"}
+    stage: ${env:STAGE, "dev"}
+    region: ${opt:region, "ap-northeast-2"}
+    app: ${self:app}
+
+    #대기열 Queue의 URL
+    waiting_queue_url:
+      Ref: WaitingQueue
+    #대기열 업데이트 알림을 위한 Queue의 URL
+    event_queue_url:
+      Ref: EventQueue
+    #유저 Counter의 DDB 이름
+    waiting_counter_ddb_name:
+      Ref: CounterDDB
+    #유저 목록 DDB 이름
+    waiting_ddb_name:
+      Ref: WaitingUserListTable
+    #유저 목록 DDB 이름
+    email_ddb_table:
+      Ref: EmailTable
+    #예약 등록 허용 시간
+    user_view_time_in_mill: 25000
+    #대기열 숫자 업데이트 간격(초)
+    notification_interval: 5
+
+    socket_api_gateway_id:
+      Ref: WebsocketsApi
+    #최대 몇명 까지 동시에 예약 가능 한지
+    concurrent: 2
+
+  deploymentBucket:
+    name: ${aws:accountId}-serverless-deploys
+    maxPreviousDeploymentArtifacts: 5
+    blockPublicAccess: true
+  deploymentPrefix: ${self:service}-${env:STAGE, "dev"}-${env:VER, "1"}-serviceBackend
+plugins:
+  - serverless-deployment-bucket
+  - serverless-cloudformation-sub-variables
+
+resources: # CloudFormation template syntax
+  #대기열 Queue의 처리를 위한 Role. SQS:DeleteMessage를 Deny
+  Resources:
+    DefaultRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: ${self:service}-${env:VER, "1"}-DefaultLambdaExcutionRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        Policies:
+          - PolicyName: myPolicyName
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:*
+                    - sqs:*
+                    - logs:*
+                    - execute-api:*
+                    - states:*
+                  Resource: "*"
+                - Effect: Deny
+                  Action:
+                    - sqs:DeleteMessage
+                  Resource:
+                    Fn::GetAtt:
+                      - WaitingQueue
+                      - Arn
+    DeleteRequestRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: ${self:service}-${env:VER, "1"}-DeleteRequestRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        Policies:
+          - PolicyName: myPolicyName
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - sqs:*
+                    - logs:*
+                  Resource: "*"
+
+    #대기열 Queue
+    WaitingQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        ContentBasedDeduplication: true
+        FifoQueue: true
+        QueueName: ${self:service}-${env:VER, "1"}-Waiting-Queue.fifo
+        VisibilityTimeout: 900
+    #대기시간 알림용 이벤트 Queue
+    EventQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${env:VER, "1"}-Event-Queue
+        VisibilityTimeout: 60
+
+    #대기열 업데이트 이벤트를 위한 Cron Event Rule
+    CronOneLambdaPermissions:
+      Type: AWS::Lambda::Permission
+      Properties:
+        Action: "lambda:InvokeFunction"
+        FunctionName:
+          Fn::GetAtt:
+            - CronUnderscoreoneUnderscoregetLambdaFunction
+            - Arn
+        Principal: events.amazonaws.com
+    CronOneJob:
+      Type: AWS::Events::Rule
+      Properties:
+        ScheduleExpression: "rate(1 minute)"
+        State: ENABLED
+        Targets:
+          - Arn:
+              Fn::GetAtt:
+                - CronUnderscoreoneUnderscoregetLambdaFunction
+                - Arn
+            Id:
+              Ref: CronUnderscoreoneUnderscoregetLambdaFunction
+
+    #유저 Counter DDB
+    CounterDDB:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${env:VER, "1"}-waiting-user-counter-table
+        AttributeDefinitions:
+          - AttributeName: counter_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: counter_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+    #유저 목록 DDB
+    WaitingUserListTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${env:VER, "1"}-waiting-user-list-table
+        AttributeDefinitions:
+          - AttributeName: connection_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: connection_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+    #이벤트용 이메일 목록 DDB
+    EmailTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${env:VER, "1"}-email-table
+        AttributeDefinitions:
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: email
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+    #StepFunctions
+    StatesExecutionRole:
+      Type: "AWS::IAM::Role"
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Principal:
+                Service:
+                  - "Fn::Sub": "states.${AWS::Region}.amazonaws.com"
+
+              Action: "sts:AssumeRole"
+        Path: "/"
+        Policies:
+          - PolicyName: StatesExecutionPolicy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - "lambda:*"
+                    - "sqs:*"
+                  Resource: "*"
+    #현재 스테이지, 버전의 http api gateway id
+    ApigatewayParms:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /${self:service}/${env:STAGE, "dev"}/api_gateway_id/${env:VER, "1"}
+        Type: String
+        Value:
+          Ref: HttpApi
+        Description: ApiGatewayId
+
+    #현재 스테이지, 버전의 websocket api gateway id
+    WebsocketApigatewayParms:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /${self:service}/${env:STAGE, "dev"}/websocket_api_gateway_id/${env:VER, "1"}
+        Type: String
+        Value:
+          Ref: WebsocketsApi
+        Description: WobsocketAPIId
+    WaitingQueueStateMachine:
+      Type: "AWS::StepFunctions::StateMachine"
+      Properties:
+        StateMachineName: ${self:service}-${env:VER, "1"}-WaitForProcess
+        RoleArn:
+          "Fn::GetAtt": ["StatesExecutionRole", "Arn"]
+        DefinitionString:
+          "Fn::Sub":
+            - |-
+              {
+                "Comment": "WaitingQueueStateMachine",
+                "StartAt": "Wait",
+                "States": {
+                  "Wait": {
+                    "Type": "Wait",
+                    "SecondsPath": "$.view_time",
+                    "Next": "Notify User"
+                  },
+                  "Notify User": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::lambda:invoke",
+                    "Parameters": {
+                      "Payload":{
+
+                        "connection_id.$": "$.connection_id",
+                        "waitQueueURL.$": "$.waitQueueURL",
+                        "receiptHandle.$": "$.receiptHandle"
+                      },
+                      "FunctionName": "#{notifiy_end_function_name}:$LATEST"
+                    },
+                    "Retry": [
+                      {
+                        "ErrorEquals": [
+                          "Lambda.ServiceException",
+                          "Lambda.AWSLambdaException",
+                          "Lambda.SdkClientException"
+                        ],
+                        "IntervalSeconds": 2,
+                        "MaxAttempts": 6,
+                        "BackoffRate": 2
+                      }
+                    ],
+                    "OutputPath": "$.Payload",
+                    "Next": "DeleteMessage"
+                  },
+                  "DeleteMessage": {
+                    "Type": "Task",
+                    "End": true,
+                    "Parameters": {
+                      "QueueUrl.$": "$.waitQueueURL",
+                      "ReceiptHandle.$": "$.receiptHandle"
+                    },
+                    "Resource": "arn:aws:states:::aws-sdk:sqs:deleteMessage"
+                  }
+                }
+              }
+            - account_id: ${aws:accountId}
+              notifiy_end_function_name:
+                Fn::GetAtt:
+                  - UserUnderscorenotifyEndLambdaFunction
+                  - Arn
+
+custom:
+
+functions:

@@ -1,0 +1,119 @@
+openapi: 3.0.0
+info:
+  title: demo-waiting-queue
+  description: demo-waiting-queue
+  version: 0.0.1
+  contact:
+    name: spark
+    mail: spark@rubywave.io
+    url: rubywave.io
+  license:
+    name: MIT
+    url: https://spdx.org/licenses/MIT
+  summary: this is a demo for waiting-queue
+servers:
+  - url: https://rubywave.io
+paths:
+  /sqs:
+    delete:
+      description: 유저가 작업을 마치고 나서 요청시 다음으로 넘어가는 함수(SQS메세지를 삭제)
+      security:
+        - bearerAuth:
+            - test
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hashKey:
+                    type: string
+                    description: hash_key
+        '500':
+          description: unexpected_error
+      parameters:
+        - name: receipt_handle
+          in: query
+          description: SQS메세지의 핸들
+          required: true
+          schema:
+            type: string
+        - name: email
+          in: query
+          description: 이메일
+          required: true
+          schema:
+            type: string
+  /dummy:
+    get:
+      description: echo 함수
+      security:
+        - bearerAuth:
+            - test
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: result
+                  records:
+                    type: object
+                    description: data
+        '500':
+          description: unexpected_error
+      parameters:
+        - name: email
+          in: query
+          description: email
+          required: true
+          schema:
+            type: string
+        - name: companyName
+          in: query
+          description: 회사명
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: 타입
+          required: false
+          schema:
+            type: string
+    delete:
+      description: Dummy Delete Function
+      security:
+        - bearerAuth:
+            - test
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: result
+        '500':
+          description: unexpected_error
+      parameters:
+        - name: dummyParam
+          in: query
+          description: dummy용 paramaeter
+          required: true
+          schema:
+            type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

@@ -1,0 +1,15 @@
+info:
+  title: demo-waiting-queue
+  description: demo-waiting-queue
+  version: 0.0.1
+  contact:
+    name: spark
+    mail: spark@rubywave.io
+    url: rubywave.io
+  license:
+    name: MIT
+    url: https://spdx.org/licenses/MIT
+  summary: this is a demo for waiting-queue
+servers:
+  - url: https://rubywave.io
+database_id: 4803f792302e4c7bbd2124a55b117465

@@ -1,0 +1,22 @@
+aws_profile: [profile name]
+app: [app_name]
+region: ap-northeast-2
+env:
+  key: test_value
+  key2: test_value2
+claimsProfiles:
+  test1:
+    email: tt1
+    sub: tt2
+  test2:
+    email: tt2
+    sub: tt3
+test_targets:
+  - uri: template/get.js
+    eventType: http
+    description: template get
+    method: get
+    parms:
+      hash_key: innocentchris@gmail.com
+    expect:
+      checkType: check_200
