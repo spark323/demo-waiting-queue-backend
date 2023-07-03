@@ -11,7 +11,7 @@ const apiSpec = {
             method: 'Get',
         },
     ],
-    disabled: true,
+
     desc: 'echo 함수',
     parameters: {
         email: { req: true, type: 'string', desc: 'email' },
