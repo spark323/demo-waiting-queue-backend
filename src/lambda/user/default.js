@@ -64,7 +64,15 @@ async function handler(inputObject, event) {
       })
 
       console.log("result:", result.Items[0]);
-      const dt = { ConnectionId: event.requestContext.connectionId, Data: JSON.stringify({ status: "update", waitingNum: queueNum, messageGroupId: result.Items[0].messageGroupId }) };
+      const dt = {
+        ConnectionId: event.requestContext.connectionId, Data: JSON.stringify({
+          status: "update",
+          waitingNum: Math.max(queueNum, 1),
+          concurrency: process.env.concurrent,
+          waitingTime: process.env.user_view_time_in_mill,
+          messageGroupId: result.Items[0].messageGroupId
+        })
+      };
       console.log(dt);
       try {
         await apigwManagementApi.postToConnection(dt).promise();

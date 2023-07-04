@@ -57,7 +57,14 @@ async function handler(inputObject, event) {
             let result = await docClient.scan(params).promise();
             //현재 대기중인 모든 유저에 대해서 웹소캣 전달
             const postCalls = result.Items.map(async ({ connection_id }) => {
-                const dt = { ConnectionId: connection_id, Data: JSON.stringify({ status: "update", waitingNum: queueNum }) };
+                const dt = {
+                    ConnectionId: connection_id, Data: JSON.stringify({
+                        status: "update",
+                        concurrency: process.env.concurrent,
+                        waitingTime: process.env.user_view_time_in_mill,
+                        waitingNum: queueNum
+                    })
+                };
                 try {
                     await apigwManagementApi.postToConnection(dt).promise();
                 } catch (e) {
