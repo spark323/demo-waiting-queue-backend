@@ -51,7 +51,7 @@ provider:
     socket_api_gateway_id:
       Ref: WebsocketsApi
     #최대 몇명 까지 동시에 예약 가능 한지
-    concurrent: 2
+    concurrent: 3
 
   deploymentBucket:
     name: ${aws:accountId}-serverless-deploys
