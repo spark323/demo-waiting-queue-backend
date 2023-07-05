@@ -1,0 +1,14 @@
+aws_profile: "My AWS Profile"
+app: demo-waiting-queue-backend
+region: ap-northeast-2
+test_targets:
+  - uri: dummy/get.js
+    eventType: http
+    description: template get
+    method: get
+    parms:
+      companyName: test
+      type: test1
+      email: spark@rubywave.io
+    expect:
+      checkType: check_200

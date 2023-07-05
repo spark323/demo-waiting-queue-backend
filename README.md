@@ -54,5 +54,5 @@ yarn deploy --aws-profile [프로파일]
 yarn deploy --aws-profile [프로파일]
 ```
 
-
-
+# 문의사항
+기타 문의사항은 spark@rubywave.io 로 문의해주세요!
