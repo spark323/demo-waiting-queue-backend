@@ -92,13 +92,13 @@ resources: # CloudFormation template syntax
                     - execute-api:*
                     - states:*
                   Resource: "*"
-                - Effect: Deny
-                  Action:
-                    - sqs:DeleteMessage
-                  Resource:
-                    Fn::GetAtt:
-                      - WaitingQueue
-                      - Arn
+                # - Effect: Deny
+                #   Action:
+                #     - sqs:DeleteMessage
+                #   Resource:
+                #     Fn::GetAtt:
+                #       - WaitingQueue
+                #       - Arn
     DeleteRequestRole:
       Type: AWS::IAM::Role
       Properties:
